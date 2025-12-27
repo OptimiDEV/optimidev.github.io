@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>optimi@vogtland.de ~</title>
+
+  <!-- JetBrains Mono Nerd Font -->
+  <link href="https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@master/patched-fonts/JetBrainsMono/Ligatures/Regular/JetBrainsMonoNerdFont-Regular.ttf" rel="preload" as="font" type="font/ttf" crossorigin>
+
+  <style>
+    @font-face {
+      font-family: "JetBrainsMono Nerd";
+      src: url("https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@master/patched-fonts/JetBrainsMono/Ligatures/Regular/JetBrainsMonoNerdFont-Regular.ttf") format("truetype");
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    :root {
+      --bg: #0b0e14;
+      --fg: #cdd6f4;
+      --accent: #89b4fa;
+      --error: #f38ba8;
+      --success: #a6e3a1;
+      --muted: #6c7086;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: black;
+      color: var(--fg);
+      font-family: "JetBrainsMono Nerd", monospace;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #terminal {
+      width: 90vw;
+      max-width: 900px;
+      height: 80vh;
+      background: black;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .line { white-space: pre-wrap; }
+    .prompt { color: var(--accent); }
+    .input-line { display: flex; }
+
+    input {
+      background: none;
+      border: none;
+      color: var(--fg);
+      font: inherit;
+      outline: none;
+      flex: 1;
+    }
+
+    .muted { color: var(--muted); }
+    .error { color: var(--error); }
+    .success { color: var(--success); }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+
+  <script>
+    const terminal = document.getElementById("terminal");
+    const user = "optimi";
+    const host = "vogtland.de";
+
+    let cwd = "/home/optimi";
+
+    const fs = {
+      "/": ["home", "etc", "bin", "dev"],
+      "/home": ["optimi"],
+      "/home/optimi": ["projects", "README.txt"],
+      "/home/optimi/projects": ["optimium", "archinstallv2"],
+    };
+
+    const fileContents = {
+      "/home/optimi/README.txt": "Welcome to my profile terminal website!"
+    };
+
+    function print(text, cls = "") {
+      if (!text) return;
+      const d = document.createElement("div");
+      d.className = `line ${cls}`;
+      d.textContent = text;
+      terminal.appendChild(d);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    let history = [], historyIndex = 0;
+
+    function prompt() {
+      const line = document.createElement("div");
+      line.className = "input-line";
+
+      const p = document.createElement("span");
+      p.className = "prompt";
+      p.textContent = `${user}@${host}:${cwd} $ `;
+
+      const input = document.createElement("input");
+
+      input.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          const cmd = input.value.trim();
+          history.push(cmd);
+          historyIndex = history.length;
+          line.removeChild(input);
+          line.appendChild(document.createTextNode(cmd));
+          handle(cmd);
+          prompt();
+        }
+        if (e.key === "ArrowUp" && historyIndex > 0) {
+          historyIndex--;
+          input.value = history[historyIndex];
+        }
+        if (e.key === "ArrowDown") {
+          if (historyIndex < history.length - 1) {
+            input.value = history[++historyIndex];
+          } else {
+            input.value = "";
+            historyIndex = history.length;
+          }
+        }
+      };
+
+      line.append(p, input);
+      terminal.appendChild(line);
+      input.focus();
+    }
+
+    const commands = {
+      ls() { const items = fs[cwd]; if (!items) { print("ls: cannot access directory", "error"); return; } print(items.join("  ")); },
+      cd(args) { const target = args[0] || "/home/optimi"; let newPath = target.startsWith("/") ? target : cwd + "/" + target; newPath = newPath.replace(/\/+/g, "/"); if (fs[newPath]) cwd = newPath; else print(`cd: no such file or directory: ${target}`, "error"); },
+      mkdir(args) { const name = args[0]; if (!name) { print("mkdir: missing operand", "error"); return; } if (!fs[cwd]) fs[cwd] = []; if (fs[cwd].includes(name)) { print(`mkdir: cannot create directory '${name}': File exists`, "error"); return; } fs[cwd].push(name); fs[cwd + "/" + name] = []; },
+      touch(args) { const name = args[0]; if (!name) { print("touch: missing file operand", "error"); return; } if (!fs[cwd]) fs[cwd] = []; if (!fs[cwd].includes(name)) fs[cwd].push(name); fileContents[cwd + "/" + name] = ""; },
+      nvim(args) { const file = args[0]; if (!file) { print("nvim: no file specified", "error"); return; } print(`Opening '${file}' in nvim...`); if (!fs[cwd]) fs[cwd] = []; if (!fs[cwd].includes(file)) fs[cwd].push(file); if (!fileContents[cwd + "/" + file]) fileContents[cwd + "/" + file] = ""; },
+      cat(args) { const file = args[0]; if (!file) { print("cat: missing file operand", "error"); return; } const path = cwd + "/" + file; if (fileContents[path] !== undefined) print(fileContents[path]); else print(`cat: ${file}: No such file`, "error"); },
+      rm(args) { const flag = args[0]; const target = args[1]; if (flag === "-rf" && target === "/") { print("rm: cannot remove /", "error"); } else { print(`rm: cannot remove '${target}': No such file or directory`, "error"); } },
+      sudo(args) { if (args[0] === "optimi") { print("Running secret Optimi command..."); } else { print(`sudo: ${args.join(" ")}: command not found`, "error"); } },
+      help() { print("Available commands:"); print("  help        - show this help"); print("  about       - about me"); print("  projects    - list projects"); print("  screenfetch - show system info"); print("  ls          - list directory contents"); print("  cd <dir>    - change directory"); print("  mkdir <dir> - create directory"); print("  touch <file>- create empty file"); print("  nvim <file> - open file in nvim"); print("  cat <file>  - display file contents"); print("  rm -rf /    - remove root directory"); print("  sudo optimi - secret command"); print("  clear       - clear terminal"); print("  reboot      - reboot system"); print("  shutdown now- power off system"); },
+      about() { print("Alex (OptimiDev)"); print("Developer | Linux enthusiast | Minecraft modder"); print("Languages: Java, Python, JS, HTML"); },
+      projects() { print("Projects:"); print("- Optimium (custom modloader)"); print("- Fabric mods for Minecraft"); print("- ArchInstallV2 (TUI installer)"); print("- Console-based profile website"); },
+      screenfetch() { print("      optimi@vogtland.de"); print("---------------------"); print("OS: Arch Linux"); print("Kernel: 6.x.x-arch"); print("Shell: websh"); print("DE: Console"); print("CPU: Intel iGPU system"); print("Memory: 16GB"); },
+      clear() { terminal.innerHTML = ""; },
+      reboot() { print("Broadcast message from root@vogtland.de: The system is going down for reboot NOW!", "error"); setTimeout(() => { terminal.innerHTML = ""; stage = 0; index = 0; boot(); }, 1200); },
+      shutdown(args) { if (args[0] !== "now") { print("shutdown: usage: shutdown now", "error"); return; } print("Broadcast message from root@vogtland.de: The system is going down for poweroff NOW!", "error"); setTimeout(() => { terminal.innerHTML = ""; print("System halted."); }, 1200); }
+    };
+
+    function handle(cmd) { if (!cmd) return; const parts = cmd.split(" "); const name = parts[0]; const args = parts.slice(1); if (commands[name]) commands[name](args); else print(`command not found: ${cmd}`, "error"); }
+
+    const grubScreen = ["GNU GRUB  version 2.12", "", "  * Arch Linux", "    Advanced options for Arch Linux", "", "      Use the ↑ and ↓ keys to select which entry is highlighted.", "      Press enter to boot the selected OS, 'e' to edit the commands"];
+    const openRCLines = [" * Mounting pseudo-filesystems ... [ ok ]", " * Starting udev ... [ ok ]", " * Mounting local filesystems ... [ ok ]", " * Loading sysctl settings ... [ ok ]", " * Setting hostname ... [ ok ]", " * Starting networking ... [ ok ]", " * Starting sshd ... [ ok ]", " * Starting login services ... [ ok ]"];
+    let stage = 0, index = 0;
+    function boot() { if (stage === 0) { if (index < grubScreen.length) { print(grubScreen[index++]); setTimeout(boot, 120); } else { stage = 1; index = 0; setTimeout(() => { terminal.innerHTML = ""; boot(); }, 1200); } } else if (stage === 1) { if (index < openRCLines.length) { print(openRCLines[index++]); setTimeout(boot, 180); } else { print(`\nWelcome to ${user}@${host}`, "success"); prompt(); } } }
+    boot();
+  </script>
+</body>
+</html>
